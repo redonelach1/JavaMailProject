@@ -4,6 +4,9 @@ import javax.mail.*;
 import javax.mail.internet.*;
 import java.util.Properties;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class EmailSender {
   public static void sendEmailWithAttachment(String to, String subject, String body, File[] attachments) {
@@ -35,15 +38,22 @@ public class EmailSender {
               textPart.setText(body);
               multipart.addBodyPart(textPart);
 
+              List<String> attachmentPaths = new ArrayList<>();
               for (File file : attachments) {
                   MimeBodyPart attachmentPart = new MimeBodyPart();
                   attachmentPart.attachFile(file);
                   multipart.addBodyPart(attachmentPart);
+                  attachmentPaths.add(file.getAbsolutePath());
               }
 
               message.setContent(multipart);
               Transport.send(message);
               System.out.println("Email sent successfully with attachments.");
+
+              // Save a copy of the sent email
+              List<String> recipients = Arrays.asList(to.split(","));
+              EmailArchiveService.saveSentEmail(subject, body, recipients, attachmentPaths);
+
           } catch (Exception e) {
               e.printStackTrace();
           }

@@ -51,7 +51,6 @@ public class EmailClientGUI extends JFrame {
           }
       });
   }
-  
 
   private static final Color BACKGROUND_COLOR = new Color(230, 240, 250);
   private static final Color ACTION_PANEL_COLOR = new Color(200, 220, 240);
