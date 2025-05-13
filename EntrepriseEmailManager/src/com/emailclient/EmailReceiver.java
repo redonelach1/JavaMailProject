@@ -4,6 +4,8 @@ import javax.mail.Message;
 import javax.mail.MessagingException;
 import com.models.EmailMessage;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Arrays;
 
 public class EmailReceiver {
     public static List<EmailMessage> receiveEmail() throws MessagingException {

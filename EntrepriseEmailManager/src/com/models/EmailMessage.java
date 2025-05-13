@@ -125,4 +125,9 @@ public class EmailMessage {
     public void restore() {
         this.isDeleted = false;
     }
+
+    // Content accessor
+    public String getContent() {
+        return this.body;
+    }
 } 

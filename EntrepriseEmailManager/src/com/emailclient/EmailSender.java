@@ -7,58 +7,78 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class EmailSender {
-  public static void sendEmailWithAttachment(String to, String subject, String body, File[] attachments) {
-      try {
-          String username = EmailSessionManager.getUsername();
-          String password = EmailSessionManager.getPassword();
+    private static final ExecutorService executorService = Executors.newFixedThreadPool(3);
+    private static Session emailSession;
 
-          Properties prop = new Properties();
-          prop.put("mail.smtp.host", "smtp.gmail.com");
-          prop.put("mail.smtp.port", "587");
-          prop.put("mail.smtp.auth", "true");
-          prop.put("mail.smtp.starttls.enable", "true");
+    private static synchronized Session getSession() {
+        if (emailSession == null) {
+            String username = EmailSessionManager.getUsername();
+            String password = EmailSessionManager.getPassword();
 
-          Session session = Session.getInstance(prop, new javax.mail.Authenticator() {
-              protected PasswordAuthentication getPasswordAuthentication() {
-                  return new PasswordAuthentication(username, password);
-              }
-          });
+            Properties prop = new Properties();
+            prop.put("mail.smtp.host", "smtp.gmail.com");
+            prop.put("mail.smtp.port", "587");
+            prop.put("mail.smtp.auth", "true");
+            prop.put("mail.smtp.starttls.enable", "true");
+            prop.put("mail.smtp.connectiontimeout", "5000");
+            prop.put("mail.smtp.timeout", "5000");
 
-          try {
-              Message message = new MimeMessage(session);
-              message.setFrom(new InternetAddress(username));
-              message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
-              message.setSubject(subject);
+            emailSession = Session.getInstance(prop, new javax.mail.Authenticator() {
+                protected PasswordAuthentication getPasswordAuthentication() {
+                    return new PasswordAuthentication(username, password);
+                }
+            });
+        }
+        return emailSession;
+    }
 
-              Multipart multipart = new MimeMultipart();
+    public static void sendEmailWithAttachment(String to, String subject, String body, File[] attachments) {
+        try {
+            Session session = getSession();
+            Message message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(EmailSessionManager.getUsername()));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+            message.setSubject(subject);
 
-              MimeBodyPart textPart = new MimeBodyPart();
-              textPart.setText(body);
-              multipart.addBodyPart(textPart);
+            Multipart multipart = new MimeMultipart();
 
-              List<String> attachmentPaths = new ArrayList<>();
-              for (File file : attachments) {
-                  MimeBodyPart attachmentPart = new MimeBodyPart();
-                  attachmentPart.attachFile(file);
-                  multipart.addBodyPart(attachmentPart);
-                  attachmentPaths.add(file.getAbsolutePath());
-              }
+            MimeBodyPart textPart = new MimeBodyPart();
+            textPart.setText(body);
+            multipart.addBodyPart(textPart);
 
-              message.setContent(multipart);
-              Transport.send(message);
-              System.out.println("Email sent successfully with attachments.");
+            List<String> attachmentPaths = new ArrayList<>();
+            for (File file : attachments) {
+                MimeBodyPart attachmentPart = new MimeBodyPart();
+                attachmentPart.attachFile(file);
+                multipart.addBodyPart(attachmentPart);
+                attachmentPaths.add(file.getAbsolutePath());
+            }
 
-              // Save a copy of the sent email
-              List<String> recipients = Arrays.asList(to.split(","));
-              EmailArchiveService.saveSentEmail(subject, body, recipients, attachmentPaths);
+            message.setContent(multipart);
+            Transport.send(message);
+            System.out.println("Email sent successfully with attachments.");
 
-          } catch (Exception e) {
-              e.printStackTrace();
-          }
-      } catch (Exception e) {
-          e.printStackTrace();
-      }
-  }
+            // Save a copy of the sent email asynchronously
+            List<String> recipients = Arrays.asList(to.split(","));
+            executorService.submit(() -> {
+                try {
+                    EmailArchiveService.saveSentEmail(subject, body, recipients, attachmentPaths);
+                } catch (Exception e) {
+                    System.err.println("Error archiving email: " + e.getMessage());
+                }
+            });
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Failed to send email: " + e.getMessage());
+        }
+    }
+
+    public static void shutdown() {
+        executorService.shutdown();
+    }
 }

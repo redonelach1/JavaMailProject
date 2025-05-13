@@ -54,10 +54,21 @@ public class EmailSessionManager {
 
   public Message[] receiveEmail() throws MessagingException {
       if (emailFolder == null || !emailFolder.isOpen()) {
-          emailFolder = store.getFolder("[Gmail]/Messages envoyés");
+          emailFolder = store.getFolder("INBOX");
           emailFolder.open(Folder.READ_ONLY);
       }
       return emailFolder.getMessages();
+  }
+
+  public Message[] getMessagesFromFolder(String folderName) throws MessagingException {
+      Folder folder = store.getFolder(folderName);
+      if (!folder.exists()) {
+          throw new MessagingException("Folder " + folderName + " does not exist");
+      }
+      folder.open(Folder.READ_ONLY);
+      Message[] messages = folder.getMessages();
+      folder.close(false);
+      return messages;
   }
 
   public void close() throws MessagingException {

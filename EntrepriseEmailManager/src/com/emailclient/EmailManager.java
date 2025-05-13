@@ -3,6 +3,7 @@ package com.emailclient;
 import com.models.EmailMessage;
 import javax.mail.Message;
 import javax.mail.MessagingException;
+import javax.mail.Folder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
