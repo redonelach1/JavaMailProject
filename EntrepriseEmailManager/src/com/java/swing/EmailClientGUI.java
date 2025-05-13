@@ -1,9 +1,14 @@
 package com.java.swing;
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 
 import com.emailclient.EmailSender;
 import com.emailclient.EmailSessionManager;
+import com.emailclient.EmailReceiver;
+import com.emailclient.EmailManager;
+import com.models.EmailMessage;
 
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
@@ -24,259 +29,437 @@ import java.awt.event.WindowEvent;
 
 @SuppressWarnings("serial")
 public class EmailClientGUI extends JFrame {
-  private JTextField usernameField = new JTextField();
-  private JPasswordField passwordField = new JPasswordField();
-  private DefaultListModel<String> emailListModel = new DefaultListModel<>();
-  private JList<String> emailList = new JList<>(emailListModel);
-  private JTextArea emailContent = new JTextArea();
-  private Message[] messages;
+    private JTextField usernameField = new JTextField();
+    private JPasswordField passwordField = new JPasswordField();
+    private DefaultListModel<EmailMessage> emailListModel = new DefaultListModel<>();
+    private JList<EmailMessage> emailList = new JList<>(emailListModel);
+    private JTextArea emailContent = new JTextArea();
+    private JTree folderTree;
+    private String currentFolder = "INBOX";
 
-  public EmailClientGUI() {
-      setTitle("Java Email Client");
-      setSize(800, 600);
-      setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-      initUI();
-      setVisible(true);
+    public EmailClientGUI() {
+        setTitle("Java Email Client");
+        setSize(1000, 700);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        initUI();
+        setVisible(true);
 
-      addWindowListener(new WindowAdapter() {
-          @Override
-          public void windowClosing(WindowEvent e) {
-              try {
-                  if (EmailSessionManager.getInstance() != null) {
-                      EmailSessionManager.getInstance().close(); // Close the email session
-                  }
-              } catch (MessagingException ex) {
-                  ex.printStackTrace();
-              }
-          }
-      });
-  }
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                try {
+                    if (EmailSessionManager.getInstance() != null) {
+                        EmailSessionManager.getInstance().close();
+                    }
+                } catch (MessagingException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
+    }
 
-  private static final Color BACKGROUND_COLOR = new Color(230, 240, 250);
-  private static final Color ACTION_PANEL_COLOR = new Color(200, 220, 240);
-  private static final Color BUTTON_COLOR = new Color(180, 220, 240);
-  private static final Font BUTTON_FONT = new Font("SansSerif", Font.BOLD, 12);
-  private static final Font EMAIL_LIST_FONT = new Font("SansSerif", Font.PLAIN, 14);
-  private static final Font EMAIL_CONTENT_FONT = new Font("SansSerif", Font.PLAIN, 14);
+    private static final Color BACKGROUND_COLOR = new Color(230, 240, 250);
+    private static final Color ACTION_PANEL_COLOR = new Color(200, 220, 240);
+    private static final Color BUTTON_COLOR = new Color(180, 220, 240);
+    private static final Font BUTTON_FONT = new Font("SansSerif", Font.BOLD, 12);
+    private static final Font EMAIL_LIST_FONT = new Font("SansSerif", Font.PLAIN, 14);
+    private static final Font EMAIL_CONTENT_FONT = new Font("SansSerif", Font.PLAIN, 14);
 
-  private void initUI() {
-      JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-      splitPane.setResizeWeight(0.5);
-      splitPane.setOneTouchExpandable(true);
+    private void initUI() {
+        // Create main split pane
+        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        mainSplitPane.setResizeWeight(0.2);
 
-      emailList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-      emailList.addListSelectionListener(this::emailListSelectionChanged);
-      emailList.setFont(EMAIL_LIST_FONT);
-      JScrollPane listScrollPane = new JScrollPane(emailList);
-      listScrollPane.setBackground(BACKGROUND_COLOR);
+        // Create folder tree
+        DefaultMutableTreeNode root = new DefaultMutableTreeNode("Folders");
+        DefaultMutableTreeNode inbox = new DefaultMutableTreeNode("INBOX");
+        DefaultMutableTreeNode sent = new DefaultMutableTreeNode("SENT");
+        DefaultMutableTreeNode draft = new DefaultMutableTreeNode("DRAFT");
+        DefaultMutableTreeNode trash = new DefaultMutableTreeNode("TRASH");
+        root.add(inbox);
+        root.add(sent);
+        root.add(draft);
+        root.add(trash);
+        
+        folderTree = new JTree(root);
+        folderTree.setFont(EMAIL_LIST_FONT);
+        folderTree.addTreeSelectionListener(e -> {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) folderTree.getLastSelectedPathComponent();
+            if (node != null) {
+                currentFolder = node.getUserObject().toString();
+                refreshEmails();
+            }
+        });
 
-      emailContent.setEditable(false);
-      emailContent.setFont(EMAIL_CONTENT_FONT);
-      JScrollPane contentScrollPane = new JScrollPane(emailContent);
-      contentScrollPane.setBackground(BACKGROUND_COLOR);
+        JScrollPane treeScrollPane = new JScrollPane(folderTree);
+        treeScrollPane.setBackground(BACKGROUND_COLOR);
+        mainSplitPane.setLeftComponent(treeScrollPane);
 
-      splitPane.setLeftComponent(listScrollPane);
-      splitPane.setRightComponent(contentScrollPane);
+        // Create email list and content split pane
+        JSplitPane emailSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        emailSplitPane.setResizeWeight(0.4);
 
-      getContentPane().setBackground(BACKGROUND_COLOR);
-      getContentPane().add(splitPane, BorderLayout.CENTER);
+        // Configure email list
+        emailList.setCellRenderer(new EmailListCellRenderer());
+        emailList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        emailList.addListSelectionListener(this::emailListSelectionChanged);
+        emailList.setFont(EMAIL_LIST_FONT);
+        JScrollPane listScrollPane = new JScrollPane(emailList);
+        listScrollPane.setBackground(BACKGROUND_COLOR);
 
-      JButton replyButton = new JButton("Reply");
-      JButton forwardButton = new JButton("Forward");
-      replyButton.setFont(BUTTON_FONT);
-      forwardButton.setFont(BUTTON_FONT);
-      replyButton.setBackground(BUTTON_COLOR);
-      forwardButton.setBackground(BUTTON_COLOR);
+        // Configure email content
+        emailContent.setEditable(false);
+        emailContent.setFont(EMAIL_CONTENT_FONT);
+        JScrollPane contentScrollPane = new JScrollPane(emailContent);
+        contentScrollPane.setBackground(BACKGROUND_COLOR);
 
-      replyButton.addActionListener(e -> prepareEmailAction("Reply"));
-      forwardButton.addActionListener(e -> prepareEmailAction("Forward"));
+        emailSplitPane.setLeftComponent(listScrollPane);
+        emailSplitPane.setRightComponent(contentScrollPane);
+        mainSplitPane.setRightComponent(emailSplitPane);
 
-      JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-      actionPanel.setBackground(ACTION_PANEL_COLOR);
-      actionPanel.add(replyButton);
-      actionPanel.add(forwardButton);
+        getContentPane().setBackground(BACKGROUND_COLOR);
+        getContentPane().add(mainSplitPane, BorderLayout.CENTER);
 
-      add(actionPanel, BorderLayout.NORTH);
+        // Create action buttons panel
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actionPanel.setBackground(ACTION_PANEL_COLOR);
 
-      JPanel bottomPanel = new JPanel(new GridLayout(1, 2));
-      bottomPanel.setBackground(ACTION_PANEL_COLOR);
-      JButton composeButton = new JButton("Compose");
-      JButton refreshInboxButton = new JButton("Refresh Inbox");
-      composeButton.setBackground(BUTTON_COLOR);
-      refreshInboxButton.setBackground(BUTTON_COLOR);
-      composeButton.setFont(BUTTON_FONT);
-      refreshInboxButton.setFont(BUTTON_FONT);
+        JButton replyButton = new JButton("Reply");
+        JButton forwardButton = new JButton("Forward");
+        JButton deleteButton = new JButton("Delete");
+        JButton markReadButton = new JButton("Mark as Read");
+        JButton moveToButton = new JButton("Move To");
 
-      composeButton.addActionListener(e -> showComposeDialog("", "", ""));
-      refreshInboxButton.addActionListener(e -> refreshInbox());
-      bottomPanel.add(composeButton);
-      bottomPanel.add(refreshInboxButton);
-      add(bottomPanel, BorderLayout.SOUTH);
+        for (JButton button : new JButton[]{replyButton, forwardButton, deleteButton, markReadButton, moveToButton}) {
+            button.setFont(BUTTON_FONT);
+            button.setBackground(BUTTON_COLOR);
+            actionPanel.add(button);
+        }
 
-      SwingUtilities.invokeLater(this::showLoginDialog);
-  }
+        replyButton.addActionListener(e -> prepareEmailAction("Reply"));
+        forwardButton.addActionListener(e -> prepareEmailAction("Forward"));
+        deleteButton.addActionListener(e -> deleteSelectedEmail());
+        markReadButton.addActionListener(e -> toggleReadStatus());
+        moveToButton.addActionListener(e -> showMoveToDialog());
 
-  private void showLoginDialog() {
-      JPanel panel = new JPanel(new GridLayout(0, 1));
-      panel.setBackground(BACKGROUND_COLOR);
+        add(actionPanel, BorderLayout.NORTH);
 
-      JLabel emailLabel = new JLabel("Email:");
-      emailLabel.setFont(BUTTON_FONT);
-      panel.add(emailLabel);
-      usernameField.setFont(EMAIL_LIST_FONT);
-      panel.add(usernameField);
+        // Create bottom panel
+        JPanel bottomPanel = new JPanel(new GridLayout(1, 3));
+        bottomPanel.setBackground(ACTION_PANEL_COLOR);
 
-      JLabel passwordLabel = new JLabel("App Password:");
-      passwordLabel.setFont(BUTTON_FONT);
-      panel.add(passwordLabel);
-      passwordField.setFont(EMAIL_LIST_FONT);
-      panel.add(passwordField);
+        JButton composeButton = new JButton("Compose");
+        JButton refreshButton = new JButton("Refresh");
+        JButton newFolderButton = new JButton("New Folder");
 
-      int result = JOptionPane.showConfirmDialog(null, panel, "Login",
-              JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-      if (result == JOptionPane.OK_OPTION) {
-          String username = usernameField.getText();
-          String password = new String(passwordField.getPassword());
-          try {
-              EmailSessionManager.getInstance(username, password);
-              refreshInbox();
-          } catch (MessagingException e) {
-              JOptionPane.showMessageDialog(this, "Failed to initialize email session: " + e.getMessage(),
-                      "Login Error", JOptionPane.ERROR_MESSAGE);
-          }
-      } else {
-          System.out.println("Login cancelled.");
-      }
-  }
+        for (JButton button : new JButton[]{composeButton, refreshButton, newFolderButton}) {
+            button.setFont(BUTTON_FONT);
+            button.setBackground(BUTTON_COLOR);
+            bottomPanel.add(button);
+        }
 
-  private void refreshInbox() {
-      try {
-          messages = EmailSessionManager.getInstance().receiveEmail();
-          emailListModel.clear();
-          for (Message message : messages) {
-              emailListModel
-                      .addElement(message.getSubject() + " - From: " + InternetAddress.toString(message.getFrom()));
-          }
-      } catch (MessagingException e) {
-          JOptionPane.showMessageDialog(this, "Failed to fetch emails: " + e.getMessage(), "Error",
-                  JOptionPane.ERROR_MESSAGE);
-      }
-  }
+        composeButton.addActionListener(e -> showComposeDialog("", "", ""));
+        refreshButton.addActionListener(e -> refreshEmails());
+        newFolderButton.addActionListener(e -> showNewFolderDialog());
 
-  private void emailListSelectionChanged(ListSelectionEvent e) {
-      if (!e.getValueIsAdjusting() && emailList.getSelectedIndex() != -1) {
-          try {
-              Message selectedMessage = messages[emailList.getSelectedIndex()];
-              emailContent.setText("");
-              emailContent.append("Subject: " + selectedMessage.getSubject() + "\n\n");
-              emailContent.append("From: " + InternetAddress.toString(selectedMessage.getFrom()) + "\n\n");
-              emailContent.append(getTextFromMessage(selectedMessage));
-          } catch (MessagingException | IOException ex) {
-              emailContent.setText("Error reading email content: " + ex.getMessage());
-          }
-      }
-  }
+        add(bottomPanel, BorderLayout.SOUTH);
 
-  private String getTextFromMessage(Message message) throws MessagingException, IOException {
-      if (message.isMimeType("text/plain")) {
-          return (String) message.getContent();
-      } else if (message.isMimeType("multipart/*")) {
-          MimeMultipart mimeMultipart = (MimeMultipart) message.getContent();
-          for (int i = 0; i < mimeMultipart.getCount(); i++) {
-              BodyPart bodyPart = mimeMultipart.getBodyPart(i);
-              if (bodyPart.isMimeType("text/plain")) {
-                  return (String) bodyPart.getContent();
-              }
-          }
-      }
-      return "No readable content found.";
-  }
- 
-  private void prepareEmailAction(String actionType) {
-      if (emailList.getSelectedIndex() == -1) {
-          JOptionPane.showMessageDialog(this, "No email selected.", "Error", JOptionPane.ERROR_MESSAGE);
-          return;
-      }
-      try {
-          Message selectedMessage = messages[emailList.getSelectedIndex()];
-          String to = actionType.equals("Reply") ? InternetAddress.toString(selectedMessage.getFrom()) : "";
-          String subjectPrefix = actionType.equals("Reply") ? "Re: " : "Fwd: ";
-          String subject = subjectPrefix + selectedMessage.getSubject();
-          String body = getTextFromMessage(selectedMessage);
+        SwingUtilities.invokeLater(this::showLoginDialog);
+    }
 
-          showComposeDialog(to, subject, body);
-      } catch (MessagingException | IOException ex) {
-          JOptionPane.showMessageDialog(this, "Error preparing email action.", "Error", JOptionPane.ERROR_MESSAGE);
-      }
-  }
+    private void refreshEmails() {
+        try {
+            // Fetch emails from the server and update the in-memory list
+            EmailReceiver.receiveEmail();
+            // Now get emails for the current folder from the in-memory list
+            List<EmailMessage> emails = EmailReceiver.getEmailsInFolder(currentFolder);
+            emailListModel.clear();
+            for (EmailMessage email : emails) {
+                emailListModel.addElement(email);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Failed to fetch emails: " + e.getMessage(), 
+                "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
-  private void showComposeDialog(String to, String subject, String body) {
-      JDialog composeDialog = new JDialog(this, "Compose Email", true);
-      composeDialog.setLayout(new BorderLayout(5, 5));
-      composeDialog.getContentPane().setBackground(BACKGROUND_COLOR);
+    private void deleteSelectedEmail() {
+        EmailMessage selectedEmail = emailList.getSelectedValue();
+        if (selectedEmail != null) {
+            EmailReceiver.deleteEmail(selectedEmail.getMessageId());
+            refreshEmails();
+        }
+    }
 
-      Box fieldsPanel = Box.createVerticalBox();
-      fieldsPanel.setBackground(BACKGROUND_COLOR);
+    private void toggleReadStatus() {
+        EmailMessage selectedEmail = emailList.getSelectedValue();
+        if (selectedEmail != null) {
+            if (selectedEmail.isRead()) {
+                EmailReceiver.markAsUnread(selectedEmail.getMessageId());
+            } else {
+                EmailReceiver.markAsRead(selectedEmail.getMessageId());
+            }
+            refreshEmails();
+        }
+    }
 
-      JTextField toField = new JTextField(to);
-      toField.setFont(EMAIL_CONTENT_FONT);
-      JTextField subjectField = new JTextField(subject);
-      subjectField.setFont(EMAIL_CONTENT_FONT);
-      JTextArea bodyArea = new JTextArea(10, 20);
-      bodyArea.setText(body);
-      bodyArea.setFont(EMAIL_CONTENT_FONT);
-      bodyArea.setLineWrap(true);
-      bodyArea.setWrapStyleWord(true);
+    private void showMoveToDialog() {
+        EmailMessage selectedEmail = emailList.getSelectedValue();
+        if (selectedEmail != null) {
+            String[] folders = EmailManager.getInstance().getFolders().toArray(new String[0]);
+            String selectedFolder = (String) JOptionPane.showInputDialog(
+                this,
+                "Select destination folder:",
+                "Move To",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                folders,
+                currentFolder
+            );
+            
+            if (selectedFolder != null) {
+                EmailReceiver.moveToFolder(selectedEmail.getMessageId(), selectedFolder);
+                refreshEmails();
+            }
+        }
+    }
 
-      JLabel toLabel = new JLabel("To:");
-      toLabel.setFont(BUTTON_FONT);
-      fieldsPanel.add(toLabel);
-      fieldsPanel.add(toField);
-      JLabel subjectLabel = new JLabel("Subject:");
-      subjectLabel.setFont(BUTTON_FONT);
-      fieldsPanel.add(subjectLabel);
-      fieldsPanel.add(subjectField);
+    private void showNewFolderDialog() {
+        String folderName = JOptionPane.showInputDialog(this, "Enter new folder name:");
+        if (folderName != null && !folderName.trim().isEmpty()) {
+            EmailManager.getInstance().createFolder(folderName);
+            refreshFolderTree();
+        }
+    }
 
-      JPanel bottomPanel = new JPanel();
-      bottomPanel.setBackground(ACTION_PANEL_COLOR);
+    private void refreshFolderTree() {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) folderTree.getModel().getRoot();
+        root.removeAllChildren();
+        
+        // Add default folders
+        root.add(new DefaultMutableTreeNode("INBOX"));
+        root.add(new DefaultMutableTreeNode("SENT"));
+        root.add(new DefaultMutableTreeNode("DRAFT"));
+        root.add(new DefaultMutableTreeNode("TRASH"));
+        
+        // Add custom folders
+        for (String folder : EmailManager.getInstance().getFolders()) {
+            if (!folder.equals("INBOX") && !folder.equals("SENT") && 
+                !folder.equals("DRAFT") && !folder.equals("TRASH")) {
+                root.add(new DefaultMutableTreeNode(folder));
+            }
+        }
+        
+        ((DefaultTreeModel) folderTree.getModel()).reload();
+    }
 
-      JButton attachButton = new JButton("Attach Files");
-      attachButton.setFont(BUTTON_FONT);
-      attachButton.setBackground(BUTTON_COLOR);
+    // Custom cell renderer for email list
+    private class EmailListCellRenderer extends DefaultListCellRenderer {
+        @Override
+        public java.awt.Component getListCellRendererComponent(
+            JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            
+            if (value instanceof EmailMessage) {
+                EmailMessage email = (EmailMessage) value;
+                String displayText = email.getSubject() + " - From: " + email.getSender();
+                
+                if (!email.isRead()) {
+                    setFont(getFont().deriveFont(Font.BOLD));
+                } else {
+                    setFont(getFont().deriveFont(Font.PLAIN));
+                }
+                
+                if (email.isDeleted()) {
+                    setForeground(Color.GRAY);
+                } else {
+                    setForeground(Color.BLACK);
+                }
+                
+                setText(displayText);
+            }
+            
+            return this;
+        }
+    }
 
-      JButton sendButton = new JButton("Send");
-      sendButton.setFont(BUTTON_FONT);
-      sendButton.setBackground(BUTTON_COLOR);
+    private void showLoginDialog() {
+        JPanel panel = new JPanel(new GridLayout(0, 1));
+        panel.setBackground(BACKGROUND_COLOR);
 
-      JLabel attachedFilesLabel = new JLabel("No files attached");
-      attachedFilesLabel.setFont(BUTTON_FONT);
+        JLabel emailLabel = new JLabel("Email:");
+        emailLabel.setFont(BUTTON_FONT);
+        panel.add(emailLabel);
+        usernameField.setFont(EMAIL_LIST_FONT);
+        panel.add(usernameField);
 
-      List<File> attachedFiles = new ArrayList<>();
-      attachButton.addActionListener(e -> {
-          File[] files = AttachmentChooser.chooseAttachments();
-          attachedFiles.addAll(Arrays.asList(files));
-          attachedFilesLabel.setText(attachedFiles.size() + " files attached");
-      });
+        JLabel passwordLabel = new JLabel("App Password:");
+        passwordLabel.setFont(BUTTON_FONT);
+        panel.add(passwordLabel);
+        passwordField.setFont(EMAIL_LIST_FONT);
+        panel.add(passwordField);
 
-      sendButton.addActionListener(e -> {
-          EmailSender.sendEmailWithAttachment(toField.getText(), subjectField.getText(), bodyArea.getText(),
-                  attachedFiles.toArray(new File[0]));
-          composeDialog.dispose();
-      });
+        int result = JOptionPane.showConfirmDialog(null, panel, "Login",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION) {
+            String username = usernameField.getText();
+            String password = new String(passwordField.getPassword());
+            try {
+                EmailSessionManager.getInstance(username, password);
+                refreshEmails();
+            } catch (MessagingException e) {
+                JOptionPane.showMessageDialog(this, "Failed to initialize email session: " + e.getMessage(),
+                        "Login Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
+            System.out.println("Login cancelled.");
+        }
+    }
 
-      bottomPanel.add(attachButton);
-      bottomPanel.add(sendButton);
+    private void emailListSelectionChanged(ListSelectionEvent e) {
+        if (!e.getValueIsAdjusting() && emailList.getSelectedIndex() != -1) {
+            try {
+                EmailMessage selectedEmail = emailList.getSelectedValue();
+                emailContent.setText("");
+                emailContent.append("Subject: " + selectedEmail.getSubject() + "\n\n");
+                emailContent.append("From: " + selectedEmail.getSender() + "\n\n");
+                emailContent.append(selectedEmail.getContent());
+            } catch (Exception ex) {
+                emailContent.setText("Error reading email content: " + ex.getMessage());
+            }
+        }
+    }
 
-      composeDialog.add(fieldsPanel, BorderLayout.NORTH);
-      composeDialog.add(new JScrollPane(bodyArea), BorderLayout.CENTER);
-      composeDialog.add(bottomPanel, BorderLayout.SOUTH);
+    private void prepareEmailAction(String actionType) {
+        if (emailList.getSelectedIndex() == -1) {
+            JOptionPane.showMessageDialog(this, "No email selected.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        try {
+            EmailMessage selectedEmail = emailList.getSelectedValue();
+            String to = actionType.equals("Reply") ? selectedEmail.getSender() : "";
+            String subjectPrefix = actionType.equals("Reply") ? "Re: " : "Fwd: ";
+            String subject = subjectPrefix + selectedEmail.getSubject();
+            String body = selectedEmail.getContent();
 
-      composeDialog.pack();
-      composeDialog.setLocationRelativeTo(this);
-      composeDialog.setVisible(true);
-  }
+            showComposeDialog(to, subject, body);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error preparing email action: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
-  public static void main(String[] args) {
-      SwingUtilities.invokeLater(() -> new EmailClientGUI());
-  }
+    private void showComposeDialog(String to, String subject, String body) {
+        JDialog composeDialog = new JDialog(this, "Compose Email", true);
+        composeDialog.setLayout(new BorderLayout(5, 5));
+        composeDialog.getContentPane().setBackground(BACKGROUND_COLOR);
+
+        Box fieldsPanel = Box.createVerticalBox();
+        fieldsPanel.setBackground(BACKGROUND_COLOR);
+
+        JTextField toField = new JTextField(to);
+        toField.setFont(EMAIL_CONTENT_FONT);
+        JTextField subjectField = new JTextField(subject);
+        subjectField.setFont(EMAIL_CONTENT_FONT);
+        JTextArea bodyArea = new JTextArea(10, 20);
+        bodyArea.setText(body);
+        bodyArea.setFont(EMAIL_CONTENT_FONT);
+        bodyArea.setLineWrap(true);
+        bodyArea.setWrapStyleWord(true);
+
+        JLabel toLabel = new JLabel("To:");
+        toLabel.setFont(BUTTON_FONT);
+        fieldsPanel.add(toLabel);
+        fieldsPanel.add(toField);
+        JLabel subjectLabel = new JLabel("Subject:");
+        subjectLabel.setFont(BUTTON_FONT);
+        fieldsPanel.add(subjectLabel);
+        fieldsPanel.add(subjectField);
+
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setBackground(ACTION_PANEL_COLOR);
+
+        JButton attachButton = new JButton("Attach Files");
+        attachButton.setFont(BUTTON_FONT);
+        attachButton.setBackground(BUTTON_COLOR);
+
+        JButton sendButton = new JButton("Send");
+        sendButton.setFont(BUTTON_FONT);
+        sendButton.setBackground(BUTTON_COLOR);
+
+        JLabel attachedFilesLabel = new JLabel("No files attached");
+        attachedFilesLabel.setFont(BUTTON_FONT);
+
+        List<File> attachedFiles = new ArrayList<>();
+        attachButton.addActionListener(e -> {
+            File[] files = AttachmentChooser.chooseAttachments();
+            if (files != null) {
+                attachedFiles.addAll(Arrays.asList(files));
+                attachedFilesLabel.setText(attachedFiles.size() + " files attached");
+            }
+        });
+
+        sendButton.addActionListener(e -> {
+            String recipient = toField.getText().trim();
+            String emailSubject = subjectField.getText().trim();
+            String emailBody = bodyArea.getText().trim();
+
+            if (recipient.isEmpty()) {
+                JOptionPane.showMessageDialog(composeDialog, 
+                    "Please enter a recipient email address.", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (emailSubject.isEmpty()) {
+                JOptionPane.showMessageDialog(composeDialog, 
+                    "Please enter a subject.", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            sendButton.setEnabled(false);
+            attachButton.setEnabled(false);
+            sendButton.setText("Sending...");
+
+            // Send email in background
+            new Thread(() -> {
+                try {
+                    EmailSender.sendEmailWithAttachment(recipient, emailSubject, emailBody,
+                            attachedFiles.toArray(new File[0]));
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(composeDialog, 
+                            "Email sent successfully!", 
+                            "Success", JOptionPane.INFORMATION_MESSAGE);
+                        composeDialog.dispose();
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(composeDialog, 
+                            "Failed to send email: " + ex.getMessage(), 
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                        sendButton.setEnabled(true);
+                        attachButton.setEnabled(true);
+                        sendButton.setText("Send");
+                    });
+                }
+            }).start();
+        });
+
+        bottomPanel.add(attachButton);
+        bottomPanel.add(sendButton);
+        bottomPanel.add(attachedFilesLabel);
+
+        composeDialog.add(fieldsPanel, BorderLayout.NORTH);
+        composeDialog.add(new JScrollPane(bodyArea), BorderLayout.CENTER);
+        composeDialog.add(bottomPanel, BorderLayout.SOUTH);
+
+        composeDialog.pack();
+        composeDialog.setLocationRelativeTo(this);
+        composeDialog.setVisible(true);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new EmailClientGUI());
+    }
 }
