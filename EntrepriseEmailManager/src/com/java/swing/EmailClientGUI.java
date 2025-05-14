@@ -9,6 +9,8 @@ import com.emailclient.EmailSessionManager;
 import com.emailclient.EmailReceiver;
 import com.emailclient.EmailManager;
 import com.models.EmailMessage;
+import com.models.MailingList;
+import com.emailclient.MailingListManager;
 
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
@@ -26,6 +28,8 @@ import java.awt.Font;
 
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 
 @SuppressWarnings("serial")
 public class EmailClientGUI extends JFrame {
@@ -99,6 +103,40 @@ public class EmailClientGUI extends JFrame {
         JSplitPane emailSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         emailSplitPane.setResizeWeight(0.4);
 
+        // Create search panel
+        JPanel searchPanel = new JPanel(new BorderLayout());
+        searchPanel.setBackground(ACTION_PANEL_COLOR);
+        JTextField searchField = new JTextField();
+        searchField.setFont(EMAIL_LIST_FONT);
+        JButton searchButton = new JButton("Search");
+        searchButton.setFont(BUTTON_FONT);
+        searchButton.setBackground(BUTTON_COLOR);
+        
+        searchButton.addActionListener(e -> {
+            String query = searchField.getText().trim();
+            if (!query.isEmpty()) {
+                List<EmailMessage> searchResults = EmailManager.getInstance().searchEmailsInFolder(currentFolder, query);
+                emailListModel.clear();
+                for (EmailMessage email : searchResults) {
+                    emailListModel.addElement(email);
+                }
+            } else {
+                refreshEmails();
+            }
+        });
+
+        searchField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    searchButton.doClick();
+                }
+            }
+        });
+
+        searchPanel.add(searchField, BorderLayout.CENTER);
+        searchPanel.add(searchButton, BorderLayout.EAST);
+
         // Configure email list
         emailList.setCellRenderer(new EmailListCellRenderer());
         emailList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -107,13 +145,18 @@ public class EmailClientGUI extends JFrame {
         JScrollPane listScrollPane = new JScrollPane(emailList);
         listScrollPane.setBackground(BACKGROUND_COLOR);
 
+        // Create a panel to hold both search and email list
+        JPanel leftPanel = new JPanel(new BorderLayout());
+        leftPanel.add(searchPanel, BorderLayout.NORTH);
+        leftPanel.add(listScrollPane, BorderLayout.CENTER);
+
         // Configure email content
         emailContent.setEditable(false);
         emailContent.setFont(EMAIL_CONTENT_FONT);
         JScrollPane contentScrollPane = new JScrollPane(emailContent);
         contentScrollPane.setBackground(BACKGROUND_COLOR);
 
-        emailSplitPane.setLeftComponent(listScrollPane);
+        emailSplitPane.setLeftComponent(leftPanel);
         emailSplitPane.setRightComponent(contentScrollPane);
         mainSplitPane.setRightComponent(emailSplitPane);
 
@@ -353,51 +396,65 @@ public class EmailClientGUI extends JFrame {
 
     private void showComposeDialog(String to, String subject, String body) {
         JDialog composeDialog = new JDialog(this, "Compose Email", true);
-        composeDialog.setLayout(new BorderLayout(5, 5));
-        composeDialog.getContentPane().setBackground(BACKGROUND_COLOR);
+        composeDialog.setLayout(new BorderLayout());
 
-        Box fieldsPanel = Box.createVerticalBox();
-        fieldsPanel.setBackground(BACKGROUND_COLOR);
-
+        JPanel fieldsPanel = new JPanel(new GridLayout(3, 1, 5, 5));
         JTextField toField = new JTextField(to);
-        toField.setFont(EMAIL_CONTENT_FONT);
         JTextField subjectField = new JTextField(subject);
-        subjectField.setFont(EMAIL_CONTENT_FONT);
-        JTextArea bodyArea = new JTextArea(10, 20);
-        bodyArea.setText(body);
-        bodyArea.setFont(EMAIL_CONTENT_FONT);
+        JTextArea bodyArea = new JTextArea(body, 10, 40);
         bodyArea.setLineWrap(true);
         bodyArea.setWrapStyleWord(true);
 
-        JLabel toLabel = new JLabel("To:");
-        toLabel.setFont(BUTTON_FONT);
-        fieldsPanel.add(toLabel);
+        fieldsPanel.add(new JLabel("To:"));
         fieldsPanel.add(toField);
-        JLabel subjectLabel = new JLabel("Subject:");
-        subjectLabel.setFont(BUTTON_FONT);
-        fieldsPanel.add(subjectLabel);
+        fieldsPanel.add(new JLabel("Subject:"));
         fieldsPanel.add(subjectField);
 
         JPanel bottomPanel = new JPanel();
-        bottomPanel.setBackground(ACTION_PANEL_COLOR);
-
         JButton attachButton = new JButton("Attach Files");
-        attachButton.setFont(BUTTON_FONT);
-        attachButton.setBackground(BUTTON_COLOR);
-
         JButton sendButton = new JButton("Send");
-        sendButton.setFont(BUTTON_FONT);
-        sendButton.setBackground(BUTTON_COLOR);
-
+        JButton mailingListButton = new JButton("Use Mailing List");
         JLabel attachedFilesLabel = new JLabel("No files attached");
-        attachedFilesLabel.setFont(BUTTON_FONT);
 
         List<File> attachedFiles = new ArrayList<>();
+
         attachButton.addActionListener(e -> {
-            File[] files = AttachmentChooser.chooseAttachments();
-            if (files != null) {
-                attachedFiles.addAll(Arrays.asList(files));
-                attachedFilesLabel.setText(attachedFiles.size() + " files attached");
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setMultiSelectionEnabled(true);
+            if (fileChooser.showOpenDialog(composeDialog) == JFileChooser.APPROVE_OPTION) {
+                attachedFiles.clear();
+                attachedFiles.addAll(Arrays.asList(fileChooser.getSelectedFiles()));
+                attachedFilesLabel.setText(attachedFiles.size() + " file(s) attached");
+            }
+        });
+
+        mailingListButton.addActionListener(e -> {
+            MailingListManager manager = MailingListManager.getInstance();
+            List<MailingList> lists = manager.getMailingLists();
+            if (lists.isEmpty()) {
+                JOptionPane.showMessageDialog(composeDialog,
+                    "No mailing lists available. Please create one first.",
+                    "No Mailing Lists",
+                    JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            String[] listNames = lists.stream()
+                .map(MailingList::getName)
+                .toArray(String[]::new);
+
+            String selectedList = (String) JOptionPane.showInputDialog(
+                composeDialog,
+                "Select a mailing list:",
+                "Choose Mailing List",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                listNames,
+                listNames[0]);
+
+            if (selectedList != null) {
+                MailingList list = manager.getMailingListByName(selectedList);
+                toField.setText(String.join(", ", list.getMembers()));
             }
         });
 
@@ -406,17 +463,11 @@ public class EmailClientGUI extends JFrame {
             String emailSubject = subjectField.getText().trim();
             String emailBody = bodyArea.getText().trim();
 
-            if (recipient.isEmpty()) {
-                JOptionPane.showMessageDialog(composeDialog, 
-                    "Please enter a recipient email address.", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            if (emailSubject.isEmpty()) {
-                JOptionPane.showMessageDialog(composeDialog, 
-                    "Please enter a subject.", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            if (recipient.isEmpty() || emailSubject.isEmpty() || emailBody.isEmpty()) {
+                JOptionPane.showMessageDialog(composeDialog,
+                    "Please fill in all fields",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
@@ -424,7 +475,6 @@ public class EmailClientGUI extends JFrame {
             attachButton.setEnabled(false);
             sendButton.setText("Sending...");
 
-            // Send email in background
             new Thread(() -> {
                 try {
                     EmailSender.sendEmailWithAttachment(recipient, emailSubject, emailBody,
@@ -449,6 +499,7 @@ public class EmailClientGUI extends JFrame {
         });
 
         bottomPanel.add(attachButton);
+        bottomPanel.add(mailingListButton);
         bottomPanel.add(sendButton);
         bottomPanel.add(attachedFilesLabel);
 
