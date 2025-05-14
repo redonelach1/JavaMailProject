@@ -100,6 +100,27 @@ public class EmailManager {
             .collect(Collectors.toList());
     }
 
+    public List<EmailMessage> searchEmails(String query) {
+        String lowerQuery = query.toLowerCase();
+        return emailMessages.stream()
+            .filter(email -> 
+                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
+                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
+                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
+            .collect(Collectors.toList());
+    }
+
+    public List<EmailMessage> searchEmailsInFolder(String folder, String query) {
+        String lowerQuery = query.toLowerCase();
+        return emailMessages.stream()
+            .filter(email -> email.getFolder().equals(folder))
+            .filter(email -> 
+                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
+                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
+                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
+            .collect(Collectors.toList());
+    }
+
     // Helper Methods
     private java.util.Optional<EmailMessage> findEmailById(String messageId) {
         return emailMessages.stream()
