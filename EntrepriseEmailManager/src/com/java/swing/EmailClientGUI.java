@@ -15,7 +15,6 @@ import java.awt.GridLayout;
 import java.awt.FlowLayout;
 import java.io.IOException;
 import java.io.File;
-import java.util.regex.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,14 +145,15 @@ public class EmailClientGUI extends JFrame {
         add(actionPanel, BorderLayout.NORTH);
 
         // Create bottom panel
-        JPanel bottomPanel = new JPanel(new GridLayout(1, 3));
+        JPanel bottomPanel = new JPanel(new GridLayout(1, 4));
         bottomPanel.setBackground(ACTION_PANEL_COLOR);
 
         JButton composeButton = new JButton("Compose");
         JButton refreshButton = new JButton("Refresh");
         JButton newFolderButton = new JButton("New Folder");
+        JButton mailingListsButton = new JButton("Mailing Lists");
 
-        for (JButton button : new JButton[]{composeButton, refreshButton, newFolderButton}) {
+        for (JButton button : new JButton[]{composeButton, refreshButton, newFolderButton, mailingListsButton}) {
             button.setFont(BUTTON_FONT);
             button.setBackground(BUTTON_COLOR);
             bottomPanel.add(button);
@@ -162,6 +162,7 @@ public class EmailClientGUI extends JFrame {
         composeButton.addActionListener(e -> showComposeDialog("", "", ""));
         refreshButton.addActionListener(e -> refreshEmails());
         newFolderButton.addActionListener(e -> showNewFolderDialog());
+        mailingListsButton.addActionListener(e -> showMailingListManagerDialog());
 
         add(bottomPanel, BorderLayout.SOUTH);
 
@@ -458,6 +459,11 @@ public class EmailClientGUI extends JFrame {
         composeDialog.pack();
         composeDialog.setLocationRelativeTo(this);
         composeDialog.setVisible(true);
+    }
+
+    private void showMailingListManagerDialog() {
+        MailingListManagerDialog dialog = new MailingListManagerDialog(this);
+        dialog.setVisible(true);
     }
 
     public static void main(String[] args) {
