@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sentEmail>
+    <attachmentPaths>C:\Users\RedNa\eclipse-workspace\JavaProjetEmailM\test_attachment.txt</attachmentPaths>
+    <body>This is a test email to verify the archiving functionality.
+The email should be saved as XML in the sent_emails directory.</body>
+    <recipients>rednahdawi@gmail.com</recipients>
+    <sentDate>2025-05-12T23:03:42.175+01:00</sentDate>
+    <subject>Test Email with Archive</subject>
+</sentEmail>
