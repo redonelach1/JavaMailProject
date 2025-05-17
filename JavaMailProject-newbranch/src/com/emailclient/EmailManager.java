@@ -1,17 +1,19 @@
 package com.emailclient;
 
-import java.util.ArrayList;
+import java.util.ArrayList; 
 import java.util.List;
 import java.util.stream.Collectors;
 
 import javax.mail.Message;
 import javax.mail.MessagingException;
+import java.text.SimpleDateFormat;
 
 import com.models.EmailMessage;
 public class EmailManager {
     private static EmailManager instance;
     private List<EmailMessage> emailMessages;
     private List<String> folders;
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");
 
     private EmailManager() {
         this.emailMessages = new ArrayList<>();
@@ -101,24 +103,34 @@ public class EmailManager {
     }
 
     public List<EmailMessage> searchEmails(String query) {
-        String lowerQuery = query.toLowerCase();
+        String q = query.toLowerCase();
         return emailMessages.stream()
-            .filter(email -> 
-                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
-                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
-                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
-            .collect(Collectors.toList());
+           .filter(email -> {
+               boolean matchesText =  (email.getSubject() != null && email.getSubject().toLowerCase().contains(q))
+                                   || (email.getSender()  != null && email.getSender().toLowerCase().contains(q))
+                                   || (email.getBody()    != null && email.getBody().toLowerCase().contains(q));
+               // ← new: match date
+               String dateStr = DATE_FMT.format(email.getReceivedDate());
+               boolean matchesDate = dateStr.contains(q);
+               return matchesText || matchesDate;
+           })
+           .collect(Collectors.toList());
     }
 
+    // do the same in searchEmailsInFolder:
     public List<EmailMessage> searchEmailsInFolder(String folder, String query) {
-        String lowerQuery = query.toLowerCase();
+        String q = query.toLowerCase();
         return emailMessages.stream()
-            .filter(email -> email.getFolder().equals(folder))
-            .filter(email -> 
-                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
-                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
-                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
-            .collect(Collectors.toList());
+           .filter(email -> email.getFolder().equals(folder))
+           .filter(email -> {
+               boolean matchesText =  (email.getSubject() != null && email.getSubject().toLowerCase().contains(q))
+                                   || (email.getSender()  != null && email.getSender().toLowerCase().contains(q))
+                                   || (email.getBody()    != null && email.getBody().toLowerCase().contains(q));
+               String dateStr = DATE_FMT.format(email.getReceivedDate());
+               boolean matchesDate = dateStr.contains(q);
+               return matchesText || matchesDate;
+           })
+           .collect(Collectors.toList());
     }
 
     // Helper Methods
