@@ -110,6 +110,7 @@ public class EmailClientGUI extends JFrame {
         searchPanel.setBackground(ACTION_PANEL_COLOR);
         JTextField searchField = new JTextField();
         searchField.setFont(EMAIL_LIST_FONT);
+        searchField.setToolTipText("Search by subject, sender, body or date (YYYY-MM-DD)");
         JButton searchButton = new JButton("Search");
         searchButton.setFont(BUTTON_FONT);
         searchButton.setBackground(BUTTON_COLOR);
@@ -430,15 +431,18 @@ public class EmailClientGUI extends JFrame {
 
     private void emailListSelectionChanged(ListSelectionEvent e) {
         if (!e.getValueIsAdjusting() && emailList.getSelectedIndex() != -1) {
-            try {
-                EmailMessage selectedEmail = emailList.getSelectedValue();
-                emailContent.setText("");
-                emailContent.append("Subject: " + selectedEmail.getSubject() + "\n\n");
-                emailContent.append("From: " + selectedEmail.getSender() + "\n\n");
-                emailContent.append(selectedEmail.getContent());
-            } catch (Exception ex) {
-                emailContent.setText("Error reading email content: " + ex.getMessage());
-            }
+            EmailMessage sel = emailList.getSelectedValue();
+            StringBuilder sb = new StringBuilder();
+            sb.append("Subject: ").append(sel.getSubject()).append("\n\n");
+            sb.append("From: ").append(sel.getSender()).append("\n\n");
+
+            // ← Ajout de la date de réception
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String dateStr = fmt.format(sel.getReceivedDate());
+            sb.append("Received: ").append(dateStr).append("\n\n");
+
+            sb.append(sel.getContent());
+            emailContent.setText(sb.toString());
         }
     }
 
