@@ -28,6 +28,7 @@ public class EmailManager {
         folders.add("SENT");
         folders.add("DRAFT");
         folders.add("TRASH");
+        folders.add("ARCHIVED"); // Added ARCHIVED folder
     }
 
     public static EmailManager getInstance() {
@@ -50,7 +51,18 @@ public class EmailManager {
         if (!folders.contains(folder)) {
             folders.add(folder);
         }
-        findEmailById(messageId).ifPresent(email -> email.moveToFolder(folder));
+        findEmailById(messageId).ifPresent(email -> {
+            email.moveToFolder(folder);
+            // If moving to ARCHIVED, save to local archive
+            if (folder.equals("ARCHIVED")) {
+                EmailArchiveService.archiveEmailMessage(email);
+                // Optionally remove from in-memory list after archiving and moving
+                // emailMessages.remove(email);
+            } else if (email.isArchived() && !folder.equals("TRASH")) {
+                // If moving from ARCHIVED to another folder (not TRASH), remove from local archive
+                // This part would require implementing a deleteFromArchive method in EmailArchiveService
+            }
+        });
     }
 
     public void deleteEmail(String messageId) {
@@ -181,18 +193,38 @@ public class EmailManager {
         // plus de propriétés si besoin
         emailMessages.add(emailMessage);
         
-        // 1) on l’ajoute à la liste principale (INBOX)
+        // 1) on l'ajoute à la liste principale (INBOX)
 
         // 2) on calcule la clé bucket (partie avant le @, minuscules)
-        String raw = emailMessage.getSender();
-        String key = raw == null ? "unknown"
-                 : raw.contains("@") ? raw.substring(0, raw.indexOf('@')).toLowerCase()
-                                    : raw.toLowerCase();
+        String rawSender = emailMessage.getSender();
+        String key;
+
+        if (rawSender == null || rawSender.trim().isEmpty()) {
+            key = "Unknown Sender"; // Use a clearer name for unknown senders
+        } else {
+            // Attempt to extract the email address from the sender string
+            int angleBracketStart = rawSender.lastIndexOf('<');
+            int angleBracketEnd = rawSender.lastIndexOf('>');
+
+            if (angleBracketStart != -1 && angleBracketEnd != -1 && angleBracketEnd > angleBracketStart) {
+                // Sender format: "Display Name <email@domain.com>"
+                key = rawSender.substring(angleBracketStart + 1, angleBracketEnd).trim().toLowerCase();
+            } else if (rawSender.contains("@")) {
+                // Sender format: "email@domain.com"
+                key = rawSender.trim().toLowerCase();
+            } else {
+                // Fallback for unparseable or unusual formats
+                key = "Other Senders"; // Group unparseable senders
+            }
+        }
 
         // 3) on crée le bucket si besoin
         senderBuckets.computeIfAbsent(key, k -> {
             // ajoute aussi le dossier virtuel à la liste
-            folders.add(k);
+            // Only add to folders list if it's a new, non-standard folder
+            if (!folders.contains(k) && !isDefaultFolder(k)) {
+                folders.add(k);
+            }
             return new ArrayList<>();
         }).add(emailMessage);
     }
@@ -201,5 +233,10 @@ public class EmailManager {
     }
     public List<EmailMessage> getEmailsBySenderBucket(String senderKey) {
         return senderBuckets.getOrDefault(senderKey, List.of());
+    }
+
+    // New method to get emails from the local archive
+    public List<EmailMessage> getArchivedEmails() {
+        return EmailArchiveService.loadArchivedEmails();
     }
 } 

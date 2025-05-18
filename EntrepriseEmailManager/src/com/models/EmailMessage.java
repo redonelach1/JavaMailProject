@@ -3,7 +3,9 @@ package com.models;
 import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
+import jakarta.xml.bind.annotation.XmlRootElement;
 
+@XmlRootElement(name = "emailMessage")
 public class EmailMessage {
     private String messageId;
     private String subject;
@@ -15,6 +17,7 @@ public class EmailMessage {
     private boolean isRead;
     private String folder;
     private boolean isDeleted;
+    private boolean isArchived;
 
     public EmailMessage() {
         this.recipients = new ArrayList<>();
@@ -22,6 +25,7 @@ public class EmailMessage {
         this.isRead = false;
         this.folder = "INBOX";
         this.isDeleted = false;
+        this.isArchived = false;
     }
 
     // Getters and Setters
@@ -103,6 +107,14 @@ public class EmailMessage {
 
     public void setDeleted(boolean deleted) {
         isDeleted = deleted;
+    }
+
+    public boolean isArchived() {
+        return isArchived;
+    }
+
+    public void setArchived(boolean archived) {
+        isArchived = archived;
     }
 
     // Helper methods
