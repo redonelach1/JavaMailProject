@@ -12,14 +12,14 @@ public class SMSSender {
     public SMSSender() {
     }
 
-    public void sendEmailAsSMS(String numDest,String content) {
+    public void sendEmailAsSMS(String nomExpediteur, String numDest, String content) {
         VonageClient client = VonageClient.builder()
                 .apiKey(API_KEY)
                 .apiSecret(API_SECRET)
                 .build();
 
          TextMessage message = new TextMessage(
-                    "Vonage APIs",
+                    nomExpediteur,
                     numDest,
                     content
                 );
