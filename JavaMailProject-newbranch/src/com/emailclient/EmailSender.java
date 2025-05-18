@@ -2,6 +2,9 @@ package com.emailclient;
 
 import javax.mail.*;
 import javax.mail.internet.*;
+
+import com.models.EmailMessage;
+
 import java.util.Properties;
 import java.io.File;
 import java.util.ArrayList;
@@ -71,6 +74,16 @@ public class EmailSender {
                     System.err.println("Error archiving email: " + e.getMessage());
                 }
             });
+         // Ajoute dans le dossier SENT de l’EmailManager
+            EmailManager manager = EmailManager.getInstance();
+            EmailMessage sent = new EmailMessage();
+            sent.setMessageId(/* génère ou récupère un ID, p. ex. java.util.UUID.randomUUID().toString() */java.util.UUID.randomUUID().toString());
+            sent.setSubject(subject);
+            sent.setBody(body);
+            sent.setSender(EmailSessionManager.getUsername());
+            sent.setReceivedDate(new java.util.Date()); // date d’envoi
+            sent.setFolder("SENT");
+            manager.addEmailMessage(sent);
 
         } catch (Exception e) {
             e.printStackTrace();

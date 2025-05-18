@@ -18,8 +18,11 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.FlowLayout;
 import java.io.IOException;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
 import java.io.File;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.Arrays;
 import javax.mail.*;
@@ -106,27 +109,84 @@ public class EmailClientGUI extends JFrame {
         emailSplitPane.setResizeWeight(0.4);
 
         // Create search panel
-        JPanel searchPanel = new JPanel(new BorderLayout());
+        JPanel searchPanel = new JPanel(new BorderLayout(5, 0));
         searchPanel.setBackground(ACTION_PANEL_COLOR);
+     // Allowed search types
+        String[] searchTypes = { "Subject", "Sender", "Body", "Date" };
+        JComboBox<String> searchTypeBox = new JComboBox<>(searchTypes);
+        searchTypeBox.setFont(EMAIL_LIST_FONT);
+        searchPanel.add(searchTypeBox, BorderLayout.WEST);
         JTextField searchField = new JTextField();
         searchField.setFont(EMAIL_LIST_FONT);
-        searchField.setToolTipText("Search by subject, sender, body or date (YYYY-MM-DD)");
+        //searchField.setToolTipText("Search by subject, sender, body or date (YYYY-MM-DD)");
         JButton searchButton = new JButton("Search");
         searchButton.setFont(BUTTON_FONT);
         searchButton.setBackground(BUTTON_COLOR);
         
         searchButton.addActionListener(e -> {
-            String query = searchField.getText().trim();
-            if (!query.isEmpty()) {
-                List<EmailMessage> searchResults = EmailManager.getInstance().searchEmailsInFolder(currentFolder, query);
-                emailListModel.clear();
-                for (EmailMessage email : searchResults) {
+            String query = searchField.getText().trim().toLowerCase();
+            emailListModel.clear();
+
+            // 1) on récupère TOUTES les emails du dossier courant
+            List<EmailMessage> emailsInFolder;
+            try {
+                // si tu veux être sûr d'avoir la dernière version :
+                EmailReceiver.receiveEmail();
+            } catch (Exception ex) {
+                // ignore ou affiche une alerte si tu préfères
+            }
+            emailsInFolder = EmailReceiver.getEmailsInFolder(currentFolder);
+
+            if (query.isEmpty()) {
+                // Si pas de recherche, on recharge simplement la liste brute
+                for (EmailMessage email : emailsInFolder) {
                     emailListModel.addElement(email);
                 }
             } else {
-                refreshEmails();
+                String type = (String) searchTypeBox.getSelectedItem();
+                List<EmailMessage> results = new ArrayList<>();
+
+                switch (type) {
+                    case "Subject":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getSubject() != null
+                                      && m.getSubject().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Sender":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getSender() != null
+                                      && m.getSender().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Body":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getContent() != null
+                                      && m.getContent().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Date":
+                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                        results = emailsInFolder.stream()
+                            .filter(m -> {
+                                java.util.Date d = m.getReceivedDate();
+                                return d != null && sdf.format(d).contains(query);
+                            })
+                            .collect(Collectors.toList());
+                        break;
+                }
+
+                // 3) on affiche uniquement les emails filtrés
+                for (EmailMessage email : results) {
+                    emailListModel.addElement(email);
+                }
             }
         });
+
+
 
         searchField.addKeyListener(new KeyAdapter() {
             @Override
@@ -433,18 +493,33 @@ public class EmailClientGUI extends JFrame {
         if (!e.getValueIsAdjusting() && emailList.getSelectedIndex() != -1) {
             EmailMessage sel = emailList.getSelectedValue();
             StringBuilder sb = new StringBuilder();
-            sb.append("Subject: ").append(sel.getSubject()).append("\n\n");
-            sb.append("From: ").append(sel.getSender()).append("\n\n");
 
-            // ← Ajout de la date de réception
-            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String dateStr = fmt.format(sel.getReceivedDate());
-            sb.append("Received: ").append(dateStr).append("\n\n");
+            sb.append("Subject: ").append(sel.getSubject()).append("\n");
+            sb.append("From: ").append(sel.getSender()).append("\n");
 
-            sb.append(sel.getContent());
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm");
+            java.util.Date dateToShow = sel.getReceivedDate();
+            if (dateToShow != null) {
+                sb.append("Date: ").append(fmt.format(dateToShow)).append("\n");
+            } else {
+                sb.append("Date: N/A\n");
+            }
+
+            sb.append("────────────────────────────────────────\n\n");
+            sb.append(sel.getContent()).append("\n\n");
+
+            List<String> atts = sel.getAttachmentPaths();
+            if (atts != null && !atts.isEmpty()) {
+                sb.append("Attachments:\n");
+                for (String path : atts) {
+                    sb.append("  • ").append(new java.io.File(path).getName()).append("\n");
+                }
+            }
+
             emailContent.setText(sb.toString());
         }
     }
+
 
     private void prepareEmailAction(String actionType) {
         if (emailList.getSelectedIndex() == -1) {

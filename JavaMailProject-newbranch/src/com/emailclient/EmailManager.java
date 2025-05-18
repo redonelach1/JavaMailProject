@@ -157,4 +157,7 @@ public class EmailManager {
         // Add more message properties as needed
         emailMessages.add(emailMessage);
     }
+    public void addEmailMessage(EmailMessage email) {
+        emailMessages.add(email);
+    }
 } 
