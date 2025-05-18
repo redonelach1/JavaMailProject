@@ -322,8 +322,8 @@ public class EmailClientGUI extends JFrame {
         smsDialog.setLayout(new GridLayout(5, 2, 10, 10));
         smsDialog.setSize(400, 250);
         
-        JLabel SenderNameLabel = new JLabel("Sender Name:");
-        JTextField SenderNameField = new JTextField("");
+        JLabel nomExpediteurLabel = new JLabel("Sender Name:");
+        JTextField nomExpediteurField = new JTextField("");
         
         JLabel destLabel = new JLabel("Destination Phone:");
         JTextField destField = new JTextField("");
@@ -337,11 +337,11 @@ public class EmailClientGUI extends JFrame {
         JLabel statusLabel = new JLabel("");
         
         sendButton.addActionListener(e -> {
-        	final String SenderName = SenderNameField.getText().trim();
             final String inputDestNumber = destField.getText().trim();
             final String message = messageField.getText().trim();
+            final String nomExpediteur = nomExpediteurField.getText().trim();
             
-            if (inputDestNumber.isEmpty() || message.isEmpty() || SenderName.isEmpty()) {
+            if (inputDestNumber.isEmpty() || message.isEmpty() || nomExpediteur.isEmpty()) {
                 JOptionPane.showMessageDialog(smsDialog, "Please fill in all fields");
                 return;
             }
@@ -352,7 +352,7 @@ public class EmailClientGUI extends JFrame {
             Thread sendSmsThread = new Thread(() -> {
                 try {
                     SMSSender smsSender = new SMSSender();
-                    smsSender.sendEmailAsSMS(SenderName, inputDestNumber, message);
+                    smsSender.sendEmailAsSMS(nomExpediteur, inputDestNumber, message);
 
                     SwingUtilities.invokeLater(() -> {
                         statusLabel.setText("SMS sent successfully!");
@@ -375,8 +375,8 @@ public class EmailClientGUI extends JFrame {
         
         cancelButton.addActionListener(e -> smsDialog.dispose());
         
-        smsDialog.add(SenderNameLabel);
-        smsDialog.add(SenderNameField);
+        smsDialog.add(nomExpediteurLabel);
+        smsDialog.add(nomExpediteurField);
         smsDialog.add(destLabel);
         smsDialog.add(destField);
         smsDialog.add(messageLabel);

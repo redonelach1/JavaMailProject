@@ -6,8 +6,8 @@ import com.vonage.client.sms.SmsSubmissionResponse;
 import com.vonage.client.sms.messages.TextMessage;
 
 public class SMSSender {
-    public static final String API_KEY = "800adaff";
-    public static final String API_SECRET = "YbltlKqFc4gM5QxA";
+    public static final String API_KEY = "bb99ba54";
+    public static final String API_SECRET = "V92ugAxPLECiu2gq";
 
     public SMSSender() {
     }
