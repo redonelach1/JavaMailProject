@@ -1,11 +1,11 @@
 package com.emailclient;
 
+import java.util.List;
+
 import javax.mail.Message;
 import javax.mail.MessagingException;
+
 import com.models.EmailMessage;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.Arrays;
 
 public class EmailReceiver {
     public static List<EmailMessage> receiveEmail() throws MessagingException {
@@ -15,9 +15,12 @@ public class EmailReceiver {
         // Convert messages to EmailMessage objects and add to EmailManager
         EmailManager emailManager = EmailManager.getInstance();
         for (Message message : messages) {
-            emailManager.addMessage(message);
+        	 String id = message.getHeader("Message-ID")[0];
+             // only add if we don't already have it
+             if (emailManager.findEmailById(id).isEmpty()) {
+                 emailManager.addMessage(message);
+             }
         }
-        
         // Return all messages from INBOX
         return emailManager.getEmailsInFolder("INBOX");
     }

@@ -1,35 +1,55 @@
 package com.java.swing;
-import javax.swing.*;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.mail.MessagingException;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JDialog;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.JTree;
+import javax.swing.ListSelectionModel;
+import javax.swing.SpinnerDateModel;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 
+import com.emailclient.EmailManager;
+import com.emailclient.EmailReceiver;
 import com.emailclient.EmailSender;
 import com.emailclient.EmailSessionManager;
-import com.emailclient.EmailReceiver;
-import com.emailclient.EmailManager;
+import com.emailclient.MailingListManager;
+import com.emailclient.SMSSender;
 import com.models.EmailMessage;
 import com.models.MailingList;
-import com.emailclient.MailingListManager;
-
-import java.awt.BorderLayout;
-import java.awt.GridLayout;
-import java.awt.FlowLayout;
-import java.io.IOException;
-import java.io.File;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Arrays;
-import javax.mail.*;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMultipart;
-import java.awt.Color;
-import java.awt.Font;
-
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 
 @SuppressWarnings("serial")
 public class EmailClientGUI extends JFrame {
@@ -104,26 +124,98 @@ public class EmailClientGUI extends JFrame {
         emailSplitPane.setResizeWeight(0.4);
 
         // Create search panel
-        JPanel searchPanel = new JPanel(new BorderLayout());
+        JPanel searchPanel = new JPanel(new BorderLayout(5, 0));
         searchPanel.setBackground(ACTION_PANEL_COLOR);
+     // Allowed search types
+        String[] searchTypes = { "Subject", "Sender", "Body", "Date" };
+        JComboBox<String> searchTypeBox = new JComboBox<>(searchTypes);
+        searchTypeBox.setFont(EMAIL_LIST_FONT);
+        searchPanel.add(searchTypeBox, BorderLayout.WEST);
         JTextField searchField = new JTextField();
         searchField.setFont(EMAIL_LIST_FONT);
+        //searchField.setToolTipText("Search by subject, sender, body or date (YYYY-MM-DD)");
         JButton searchButton = new JButton("Search");
         searchButton.setFont(BUTTON_FONT);
         searchButton.setBackground(BUTTON_COLOR);
         
         searchButton.addActionListener(e -> {
-            String query = searchField.getText().trim();
-            if (!query.isEmpty()) {
-                List<EmailMessage> searchResults = EmailManager.getInstance().searchEmailsInFolder(currentFolder, query);
-                emailListModel.clear();
-                for (EmailMessage email : searchResults) {
+            String query = searchField.getText().trim().toLowerCase();
+            emailListModel.clear();
+
+            // 1) on récupère TOUTES les emails du dossier courant
+            List<EmailMessage> emailsInFolder;
+            try {
+                // force la récupération des nouveaux messages
+                EmailReceiver.receiveEmail();
+                // puis met à jour l’arborescence des dossiers
+                refreshFolderTree();
+
+                // maintenant on peut relire le contenu du dossier sélectionné
+                emailsInFolder = EmailReceiver.getEmailsInFolder(currentFolder);
+
+            } catch (MessagingException ex) {
+                // log + affichage d’erreur à l’utilisateur
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this,
+                    "Impossible de récupérer les e‑mails : " + ex.getMessage(),
+                    "Erreur", JOptionPane.ERROR_MESSAGE);
+
+                // on vide la liste pour éviter du « null »
+                emailsInFolder = new ArrayList<>();
+            }
+
+            emailsInFolder = EmailReceiver.getEmailsInFolder(currentFolder);
+
+            if (query.isEmpty()) {
+                // Si pas de recherche, on recharge simplement la liste brute
+                for (EmailMessage email : emailsInFolder) {
                     emailListModel.addElement(email);
                 }
             } else {
-                refreshEmails();
+                String type = (String) searchTypeBox.getSelectedItem();
+                List<EmailMessage> results = new ArrayList<>();
+
+                switch (type) {
+                    case "Subject":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getSubject() != null
+                                      && m.getSubject().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Sender":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getSender() != null
+                                      && m.getSender().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Body":
+                        results = emailsInFolder.stream()
+                            .filter(m -> m.getContent() != null
+                                      && m.getContent().toLowerCase().contains(query))
+                            .collect(Collectors.toList());
+                        break;
+
+                    case "Date":
+                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                        results = emailsInFolder.stream()
+                            .filter(m -> {
+                                java.util.Date d = m.getReceivedDate();
+                                return d != null && sdf.format(d).contains(query);
+                            })
+                            .collect(Collectors.toList());
+                        break;
+                }
+
+                // 3) on affiche uniquement les emails filtrés
+                for (EmailMessage email : results) {
+                    emailListModel.addElement(email);
+                }
             }
         });
+
+
 
         searchField.addKeyListener(new KeyAdapter() {
             @Override
@@ -188,15 +280,17 @@ public class EmailClientGUI extends JFrame {
         add(actionPanel, BorderLayout.NORTH);
 
         // Create bottom panel
-        JPanel bottomPanel = new JPanel(new GridLayout(1, 4));
+        JPanel bottomPanel = new JPanel(new GridLayout(1, 5));
         bottomPanel.setBackground(ACTION_PANEL_COLOR);
 
         JButton composeButton = new JButton("Compose");
         JButton refreshButton = new JButton("Refresh");
         JButton newFolderButton = new JButton("New Folder");
         JButton mailingListsButton = new JButton("Mailing Lists");
+        JButton sendSMSButton = new JButton("Send SMS");
+        JButton switchAccountButton = new JButton("Switch Account");
 
-        for (JButton button : new JButton[]{composeButton, refreshButton, newFolderButton, mailingListsButton}) {
+        for (JButton button : new JButton[]{composeButton, refreshButton, newFolderButton, mailingListsButton, sendSMSButton, switchAccountButton}) {
             button.setFont(BUTTON_FONT);
             button.setBackground(BUTTON_COLOR);
             bottomPanel.add(button);
@@ -206,17 +300,82 @@ public class EmailClientGUI extends JFrame {
         refreshButton.addActionListener(e -> refreshEmails());
         newFolderButton.addActionListener(e -> showNewFolderDialog());
         mailingListsButton.addActionListener(e -> showMailingListManagerDialog());
-
+        sendSMSButton.addActionListener(e -> showSendSMSDialog());
+        switchAccountButton.addActionListener(e -> switchAccount());
+        
         add(bottomPanel, BorderLayout.SOUTH);
 
         SwingUtilities.invokeLater(this::showLoginDialog);
     }
 
-    private void refreshEmails() {
+    private void showSendSMSDialog() {
+        JDialog smsDialog = new JDialog(this, "Send SMS Message", true);
+        smsDialog.setLayout(new GridLayout(5, 2, 10, 10));
+        smsDialog.setSize(400, 250);
+        
+        JLabel destLabel = new JLabel("Destination Phone:");
+        JTextField destField = new JTextField("");
+        
+        JLabel messageLabel = new JLabel("Message:");
+        JTextField messageField = new JTextField("");
+        
+        JButton sendButton = new JButton("Send");
+        JButton cancelButton = new JButton("Cancel");
+        
+        JLabel statusLabel = new JLabel("");
+        
+        sendButton.addActionListener(e -> {
+            final String inputDestNumber = destField.getText().trim();
+            final String message = messageField.getText().trim();
+            
+            if (inputDestNumber.isEmpty() || message.isEmpty()) {
+                JOptionPane.showMessageDialog(smsDialog, "Please fill in all fields");
+                return;
+            }
+            
+            sendButton.setEnabled(false);
+            statusLabel.setText("Sending...");
+            
+            new Thread(() -> {
+                try {
+                    SMSSender smsSender = new SMSSender();
+                    smsSender.sendEmailAsSMS(inputDestNumber, message);
+                    
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("SMS sent successfully!");
+                        sendButton.setEnabled(true);
+                    });
+                } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("Error: " + ex.getMessage());
+                        sendButton.setEnabled(true);
+                        JOptionPane.showMessageDialog(smsDialog, 
+                            "Failed to send SMS: " + ex.getMessage(),
+                            "SMS Error", 
+                            JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            }).start();
+        });
+        
+        cancelButton.addActionListener(e -> smsDialog.dispose());
+        
+        smsDialog.add(destLabel);
+        smsDialog.add(destField);
+        smsDialog.add(messageLabel);
+        smsDialog.add(messageField);
+        smsDialog.add(statusLabel);
+        smsDialog.add(new JLabel(""));
+        smsDialog.add(sendButton);
+        smsDialog.add(cancelButton);
+        
+        smsDialog.setLocationRelativeTo(this);
+        smsDialog.setVisible(true);
+    }
+
+ /*   private void refreshEmails() {
         try {
-            // Fetch emails from the server and update the in-memory list
             EmailReceiver.receiveEmail();
-            // Now get emails for the current folder from the in-memory list
             List<EmailMessage> emails = EmailReceiver.getEmailsInFolder(currentFolder);
             emailListModel.clear();
             for (EmailMessage email : emails) {
@@ -226,7 +385,30 @@ public class EmailClientGUI extends JFrame {
             JOptionPane.showMessageDialog(this, "Failed to fetch emails: " + e.getMessage(), 
                 "Error", JOptionPane.ERROR_MESSAGE);
         }
-    }
+    } */
+    private void refreshEmails() {
+    	  try {
+    	    EmailReceiver.receiveEmail();       // fetch + addMessage(…) → folders list updated
+    	    refreshFolderTree();                // populate the JTree from the up‑to‑date folders
+
+    	    List<EmailMessage> emails;
+    	    if (List.of("INBOX","SENT","DRAFT","TRASH").contains(currentFolder)) {
+    	      emails = EmailReceiver.getEmailsInFolder(currentFolder);
+    	    } else {
+    	      emails = EmailManager.getInstance()
+    	               .getEmailsBySenderBucket(currentFolder);
+    	    }
+
+    	    emailListModel.clear();
+    	    emails.forEach(emailListModel::addElement);
+    	  } catch (Exception e) {
+    	    e.printStackTrace();
+    	    JOptionPane.showMessageDialog(this,
+    	      "Failed to fetch emails: " + e.getMessage(),
+    	      "Error", JOptionPane.ERROR_MESSAGE);
+    	  }
+    	}
+
 
     private void deleteSelectedEmail() {
         EmailMessage selectedEmail = emailList.getSelectedValue();
@@ -277,17 +459,15 @@ public class EmailClientGUI extends JFrame {
         }
     }
 
-    private void refreshFolderTree() {
+   /* private void refreshFolderTree() {
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) folderTree.getModel().getRoot();
         root.removeAllChildren();
         
-        // Add default folders
         root.add(new DefaultMutableTreeNode("INBOX"));
         root.add(new DefaultMutableTreeNode("SENT"));
         root.add(new DefaultMutableTreeNode("DRAFT"));
         root.add(new DefaultMutableTreeNode("TRASH"));
         
-        // Add custom folders
         for (String folder : EmailManager.getInstance().getFolders()) {
             if (!folder.equals("INBOX") && !folder.equals("SENT") && 
                 !folder.equals("DRAFT") && !folder.equals("TRASH")) {
@@ -296,9 +476,26 @@ public class EmailClientGUI extends JFrame {
         }
         
         ((DefaultTreeModel) folderTree.getModel()).reload();
-    }
 
-    // Custom cell renderer for email list
+    }*/
+    private void refreshFolderTree() {
+        DefaultMutableTreeNode root = (DefaultMutableTreeNode) folderTree.getModel().getRoot();
+        root.removeAllChildren();
+
+        // 1) dossiers standards
+        for (String f : List.of("INBOX","SENT","DRAFT","TRASH")) {
+            root.add(new DefaultMutableTreeNode(f));
+        }
+
+        // 2) dossiers virtuels par expéditeur
+        EmailManager.getInstance().getFolders().stream()
+            .filter(f -> !List.of("INBOX","SENT","DRAFT","TRASH").contains(f))
+            .sorted()
+            .forEach(f -> root.add(new DefaultMutableTreeNode(f)));
+
+        ((DefaultTreeModel) folderTree.getModel()).reload();
+    }
+    
     private class EmailListCellRenderer extends DefaultListCellRenderer {
         @Override
         public java.awt.Component getListCellRendererComponent(
@@ -327,7 +524,7 @@ public class EmailClientGUI extends JFrame {
             
             return this;
         }
-    }
+      }
 
     private void showLoginDialog() {
         JPanel panel = new JPanel(new GridLayout(0, 1));
@@ -364,17 +561,35 @@ public class EmailClientGUI extends JFrame {
 
     private void emailListSelectionChanged(ListSelectionEvent e) {
         if (!e.getValueIsAdjusting() && emailList.getSelectedIndex() != -1) {
-            try {
-                EmailMessage selectedEmail = emailList.getSelectedValue();
-                emailContent.setText("");
-                emailContent.append("Subject: " + selectedEmail.getSubject() + "\n\n");
-                emailContent.append("From: " + selectedEmail.getSender() + "\n\n");
-                emailContent.append(selectedEmail.getContent());
-            } catch (Exception ex) {
-                emailContent.setText("Error reading email content: " + ex.getMessage());
+            EmailMessage sel = emailList.getSelectedValue();
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("Subject: ").append(sel.getSubject()).append("\n");
+            sb.append("From: ").append(sel.getSender()).append("\n");
+
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm");
+            java.util.Date dateToShow = sel.getReceivedDate();
+            if (dateToShow != null) {
+                sb.append("Date: ").append(fmt.format(dateToShow)).append("\n");
+            } else {
+                sb.append("Date: N/A\n");
             }
+
+            sb.append("────────────────────────────────────────\n\n");
+            sb.append(sel.getContent()).append("\n\n");
+
+            List<String> atts = sel.getAttachmentPaths();
+            if (atts != null && !atts.isEmpty()) {
+                sb.append("Attachments:\n");
+                for (String path : atts) {
+                    sb.append("  • ").append(new java.io.File(path).getName()).append("\n");
+                }
+            }
+
+            emailContent.setText(sb.toString());
         }
     }
+
 
     private void prepareEmailAction(String actionType) {
         if (emailList.getSelectedIndex() == -1) {
@@ -413,6 +628,7 @@ public class EmailClientGUI extends JFrame {
         JPanel bottomPanel = new JPanel();
         JButton attachButton = new JButton("Attach Files");
         JButton sendButton = new JButton("Send");
+        JButton scheduleButton = new JButton("Schedule");
         JButton mailingListButton = new JButton("Use Mailing List");
         JLabel attachedFilesLabel = new JLabel("No files attached");
 
@@ -498,9 +714,62 @@ public class EmailClientGUI extends JFrame {
             }).start();
         });
 
+        scheduleButton.addActionListener(e -> {
+            String recipient = toField.getText().trim();
+            String emailSubject = subjectField.getText().trim();
+            String emailBody = bodyArea.getText().trim();
+
+            if (recipient.isEmpty() || emailSubject.isEmpty() || emailBody.isEmpty()) {
+                JOptionPane.showMessageDialog(composeDialog,
+                    "Please fill in all fields before scheduling",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            JSpinner dateTimeSpinner = new JSpinner(new SpinnerDateModel());
+            JSpinner.DateEditor timeEditor = new JSpinner.DateEditor(dateTimeSpinner, "yyyy-MM-dd HH:mm");
+            dateTimeSpinner.setEditor(timeEditor);
+
+            int option = JOptionPane.showConfirmDialog(
+                composeDialog,
+                dateTimeSpinner,
+                "Select Date and Time to Send",
+                JOptionPane.OK_CANCEL_OPTION
+            );
+
+            if (option == JOptionPane.OK_OPTION) {
+                java.util.Date scheduledDate = (java.util.Date) dateTimeSpinner.getValue();
+                if (scheduledDate.before(new java.util.Date())) {
+                    JOptionPane.showMessageDialog(composeDialog,
+                        "Scheduled time must be in the future.",
+                        "Invalid Time",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                try {
+                    EmailSender.scheduleEmailWithAttachment(
+                        recipient, emailSubject, emailBody,
+                        attachedFiles.toArray(new File[0]),
+                        scheduledDate
+                    );
+                    JOptionPane.showMessageDialog(composeDialog,
+                        "Email scheduled successfully for: " + scheduledDate,
+                        "Scheduled", JOptionPane.INFORMATION_MESSAGE);
+                    composeDialog.dispose();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(composeDialog,
+                        "Failed to schedule email: " + ex.getMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
         bottomPanel.add(attachButton);
         bottomPanel.add(mailingListButton);
         bottomPanel.add(sendButton);
+        bottomPanel.add(scheduleButton);
         bottomPanel.add(attachedFilesLabel);
 
         composeDialog.add(fieldsPanel, BorderLayout.NORTH);
@@ -520,4 +789,15 @@ public class EmailClientGUI extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new EmailClientGUI());
     }
+    private void switchAccount() {
+        try {
+            EmailSessionManager.getInstance().close();
+        } catch (Exception ignored) {}
+        emailListModel.clear();
+        emailContent.setText("");
+        usernameField.setText("");
+        passwordField.setText("");
+        showLoginDialog();
+    }
+
 }

@@ -1,7 +1,6 @@
 package com.emailclient;
 
 import java.io.File;
-import java.util.Arrays;
 
 public class EmailArchiveTest {
     public static void main(String[] args) {

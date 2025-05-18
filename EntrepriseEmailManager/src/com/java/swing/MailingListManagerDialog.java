@@ -1,6 +1,6 @@
 package com.java.swing;
 
-import com.emailclient.MailingListManager;
+import com.emailclient.MailingListManager; 
 import com.models.MailingList;
 
 import javax.swing.*;
@@ -9,6 +9,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.List;
 
+@SuppressWarnings("serial")
 public class MailingListManagerDialog extends JDialog {
     private JTable table;
     private DefaultTableModel tableModel;
@@ -107,4 +108,6 @@ public class MailingListManagerDialog extends JDialog {
         }
         return null;
     }
+
+
 } 

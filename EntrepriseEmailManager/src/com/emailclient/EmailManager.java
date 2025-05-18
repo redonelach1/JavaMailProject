@@ -1,17 +1,24 @@
 package com.emailclient;
 
-import com.models.EmailMessage;
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.Folder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+import javax.mail.Message;
+import javax.mail.MessagingException;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+
+import com.models.EmailMessage;
 public class EmailManager {
     private static EmailManager instance;
     private List<EmailMessage> emailMessages;
     private List<String> folders;
+    private static final SimpleDateFormat DATE_FMT = new SimpleDateFormat("yyyy-MM-dd");
+    private final Map<String,List<EmailMessage>> senderBuckets = new HashMap<>();
 
     private EmailManager() {
         this.emailMessages = new ArrayList<>();
@@ -88,6 +95,7 @@ public class EmailManager {
             .collect(Collectors.toList());
     }
 
+
     public List<EmailMessage> getUnreadEmails() {
         return emailMessages.stream()
             .filter(email -> !email.isRead())
@@ -101,28 +109,38 @@ public class EmailManager {
     }
 
     public List<EmailMessage> searchEmails(String query) {
-        String lowerQuery = query.toLowerCase();
+        String q = query.toLowerCase();
         return emailMessages.stream()
-            .filter(email -> 
-                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
-                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
-                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
-            .collect(Collectors.toList());
+           .filter(email -> {
+               boolean matchesText =  (email.getSubject() != null && email.getSubject().toLowerCase().contains(q))
+                                   || (email.getSender()  != null && email.getSender().toLowerCase().contains(q))
+                                   || (email.getBody()    != null && email.getBody().toLowerCase().contains(q));
+               // ← new: match date
+               String dateStr = DATE_FMT.format(email.getReceivedDate());
+               boolean matchesDate = dateStr.contains(q);
+               return matchesText || matchesDate;
+           })
+           .collect(Collectors.toList());
     }
 
+    // do the same in searchEmailsInFolder:
     public List<EmailMessage> searchEmailsInFolder(String folder, String query) {
-        String lowerQuery = query.toLowerCase();
+        String q = query.toLowerCase();
         return emailMessages.stream()
-            .filter(email -> email.getFolder().equals(folder))
-            .filter(email -> 
-                (email.getSubject() != null && email.getSubject().toLowerCase().contains(lowerQuery)) ||
-                (email.getSender() != null && email.getSender().toLowerCase().contains(lowerQuery)) ||
-                (email.getBody() != null && email.getBody().toLowerCase().contains(lowerQuery)))
-            .collect(Collectors.toList());
+           .filter(email -> email.getFolder().equals(folder))
+           .filter(email -> {
+               boolean matchesText =  (email.getSubject() != null && email.getSubject().toLowerCase().contains(q))
+                                   || (email.getSender()  != null && email.getSender().toLowerCase().contains(q))
+                                   || (email.getBody()    != null && email.getBody().toLowerCase().contains(q));
+               String dateStr = DATE_FMT.format(email.getReceivedDate());
+               boolean matchesDate = dateStr.contains(q);
+               return matchesText || matchesDate;
+           })
+           .collect(Collectors.toList());
     }
 
     // Helper Methods
-    private java.util.Optional<EmailMessage> findEmailById(String messageId) {
+    public java.util.Optional<EmailMessage> findEmailById(String messageId) {
         return emailMessages.stream()
             .filter(email -> email.getMessageId().equals(messageId))
             .findFirst();
@@ -136,7 +154,7 @@ public class EmailManager {
     }
 
     // Message Conversion
-    public void addMessage(Message message) throws MessagingException {
+  /*  public void addMessage(Message message) throws MessagingException {
         EmailMessage emailMessage = new EmailMessage();
         emailMessage.setMessageId(message.getHeader("Message-ID")[0]);
         emailMessage.setSubject(message.getSubject());
@@ -144,5 +162,44 @@ public class EmailManager {
         emailMessage.setReceivedDate(message.getReceivedDate());
         // Add more message properties as needed
         emailMessages.add(emailMessage);
+    }
+    */
+    public void addMessage(Message message) throws MessagingException {
+        EmailMessage emailMessage = new EmailMessage();
+        emailMessage.setMessageId(message.getHeader("Message-ID")[0]);
+        emailMessage.setSubject(message.getSubject());
+        emailMessage.setSender(message.getFrom()[0].toString());
+        emailMessage.setReceivedDate(message.getReceivedDate());
+
+        // ← NEW: extract the body (handles multipart)
+        try {
+            String text = MailUtils.extractText(message);
+            emailMessage.setBody(text);
+        } catch (IOException io) {
+            emailMessage.setBody("");           // fallback to empty on error
+        }
+        // plus de propriétés si besoin
+        emailMessages.add(emailMessage);
+        
+        // 1) on l’ajoute à la liste principale (INBOX)
+
+        // 2) on calcule la clé bucket (partie avant le @, minuscules)
+        String raw = emailMessage.getSender();
+        String key = raw == null ? "unknown"
+                 : raw.contains("@") ? raw.substring(0, raw.indexOf('@')).toLowerCase()
+                                    : raw.toLowerCase();
+
+        // 3) on crée le bucket si besoin
+        senderBuckets.computeIfAbsent(key, k -> {
+            // ajoute aussi le dossier virtuel à la liste
+            folders.add(k);
+            return new ArrayList<>();
+        }).add(emailMessage);
+    }
+    public void addEmailMessage(EmailMessage email) {
+        emailMessages.add(email);
+    }
+    public List<EmailMessage> getEmailsBySenderBucket(String senderKey) {
+        return senderBuckets.getOrDefault(senderKey, List.of());
     }
 } 
