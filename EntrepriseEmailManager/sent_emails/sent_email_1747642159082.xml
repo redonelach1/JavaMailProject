@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sentEmail>
+    <body>Test Envoi</body>
+    <recipients>bekkalimohammed@hotmail.com</recipients>
+    <sentDate>2025-05-19T09:09:19.082+01:00</sentDate>
+    <subject>Test</subject>
+</sentEmail>
