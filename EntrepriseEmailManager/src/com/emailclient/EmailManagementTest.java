@@ -7,8 +7,8 @@ public class EmailManagementTest {
     public static void main(String[] args) {
         try {
             // Initialize email session
-            String username = "redone1lachgar@gmail.com";
-            String password = "gcbw qobd kdja rhwa";
+            String username = "";
+            String password = "";
             EmailSessionManager.getInstance(username, password);
 
             // Test receiving emails

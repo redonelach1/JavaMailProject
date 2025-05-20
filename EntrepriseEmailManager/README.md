@@ -25,18 +25,17 @@ A simple desktop email client built with Java Swing, demonstrating core email fu
 
 1.  **Clone the Repository:**
     ```bash
-    # Assuming your project is in a git repository
-    git clone <repository_url>
+    git clone https://github.com/redonelach1/JavaMailProject
     cd <project_directory>
     ```
     If not using Git, navigate to the project's root directory.
 
 2.  **Build the Project with Maven:**
-    Open a terminal in the project's root directory (`/c:/Users/RedNa/eclipse-workspace/JavaProjetEmailM/`) and run:
+    Open a terminal in the project's root directory and run:
     ```bash
     mvn clean install
     ```
-    This will download dependencies (like JavaMail and Gson) and build the project.
+    This will download dependencies and build the project.
 
 3.  **Run the Application:**
     You can run the application using the Maven exec plugin:
